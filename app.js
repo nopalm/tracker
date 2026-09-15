@@ -1,27 +1,10 @@
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 
+// Inisialisasi Supabase SDK Resmi
 const SUPABASE_URL = 'https://trqzrvrvvcdfzhhruodk.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRycXpydnJ2dmNkZnpoaHJ1b2RrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk0NDczNzAsImV4cCI6MjEwNTAyMzM3MH0.QlQLN275qdqFxS1bHa_sPGfDGmEz7CQZlhSVfK38Nes';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRycXpydnJ2dmNkZnpoaHJ1b2RrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk0NDczNzAsImV4cCI6MjEwNTAyMzM3MH0.QlQLN275qdqFxS1bHa_sPGfDGmEz7CQZlhSVfK38Nes'; 
 
-// Fungsi helper untuk fetch langsung ke REST API Supabase
-async function api(path, options = {}) {
-    let res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
-        ...options,
-        headers: {
-            'apikey': SUPABASE_ANON_KEY,
-            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-            'Content-Type': 'application/json',
-            'Prefer': options.method && options.method !== 'GET' ? 'return=representation' : 'count=exact',
-            ...(options.headers || {})
-        }
-    });
-    if (!res.ok) {
-        let errText = await res.text();
-        console.error("Supabase API Error:", errText);
-        return null;
-    }
-    return res.status !== 204 ? await res.json() : true;
-}
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 let state = { goals: [], tasks: [] };
 
@@ -81,12 +64,14 @@ function render() {
 }
 
 async function loadData() {
-    // Ambil goals beserta relasi subgoals menggunakan PostgREST syntax
-    let goalsData = await api('goals?select=*,subgoals(*)');
-    let tasksData = await api('daily_tasks?select=*');
+    const { data: goalsData, error: goalError } = await supabaseClient.from('goals').select('*, subgoals(*)');
+    const { data: tasksData, error: taskError } = await supabaseClient.from('daily_tasks').select('*');
     
-    if (goalsData) state.goals = goalsData;
-    if (tasksData) state.tasks = tasksData;
+    if (goalError) console.error("Goal Error:", goalError);
+    if (taskError) console.error("Task Error:", taskError);
+    
+    if (!goalError && goalsData) state.goals = goalsData;
+    if (!taskError && tasksData) state.tasks = tasksData;
     render();
 }
 
@@ -106,50 +91,41 @@ $('#entryForm').addEventListener('submit', async e => {
 
     if (type === 'task') {
         let newTask = {
-            id: crypto.randomUUID(),
             name: f.get('name'),
             goal_id: f.get('goalId') || null,
             task_date: today,
             done: false
         };
-        let res = await api('daily_tasks', {
-            method: 'POST',
-            body: JSON.stringify(newTask)
-        });
-        if (res && res[0]) {
-            state.tasks.push(res[0]);
+        const { data, error } = await supabaseClient.from('daily_tasks').insert([newTask]).select();
+        if (!error && data) {
+            state.tasks.push(data[0]);
             render();
+        } else {
+            console.error("Insert Task Error:", error);
         }
     } else {
-        let goalId = crypto.randomUUID();
-        let newGoal = {
-            id: goalId,
-            name: f.get('name')
-        };
-        let goalRes = await api('goals', {
-            method: 'POST',
-            body: JSON.stringify(newGoal)
-        });
+        let newGoal = { name: f.get('name') };
+        const { data: goalData, error: goalError } = await supabaseClient.from('goals').insert([newGoal]).select();
         
-        if (goalRes && goalRes[0]) {
-            let createdGoal = goalRes[0];
+        if (!goalError && goalData) {
+            let createdGoal = goalData[0];
             let newSubgoal = {
-                id: crypto.randomUUID(),
-                goal_id: goalId,
+                goal_id: createdGoal.id,
                 name: f.get('subgoal'),
                 target: Number(f.get('target')),
                 current: 0
             };
-            let subRes = await api('subgoals', {
-                method: 'POST',
-                body: JSON.stringify(newSubgoal)
-            });
+            const { data: subData, error: subError } = await supabaseClient.from('subgoals').insert([newSubgoal]).select();
             
-            if (subRes && subRes[0]) {
-                createdGoal.subgoals = [subRes[0]];
+            if (!subError && subData) {
+                createdGoal.subgoals = subData;
                 state.goals.push(createdGoal);
                 render();
+            } else {
+                console.error("Insert Subgoal Error:", subError);
             }
+        } else {
+            console.error("Insert Goal Error:", goalError);
         }
     }
 });
@@ -170,10 +146,7 @@ document.addEventListener('click', async e => {
         let t = state.tasks.find(t => t.id == id);
         if (t) {
             t.done = e.target.checked;
-            await api(`daily_tasks?id=eq.${id}`, {
-                method: 'PATCH',
-                body: JSON.stringify({ done: t.done })
-            });
+            await supabaseClient.from('daily_tasks').update({ done: t.done }).eq('id', id);
             render();
         }
     }
@@ -181,9 +154,7 @@ document.addEventListener('click', async e => {
     let del = e.target.dataset.deleteTask;
     if (del) {
         state.tasks = state.tasks.filter(t => t.id != del);
-        await api(`daily_tasks?id=eq.${del}`, {
-            method: 'DELETE'
-        });
+        await supabaseClient.from('daily_tasks').delete().eq('id', del);
         render();
     }
 });
