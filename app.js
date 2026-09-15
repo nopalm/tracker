@@ -6,7 +6,7 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 
 const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-let state = { goals: [], tasks: [] };
+let state = { goals: [], tasks: [], chartRange: { weekChart: 'week', dashboardChart: 'week' } };
 
 const dayKey = d => new Date(d || Date.now()).toISOString().slice(0, 10), today = dayKey();
 const fmt = n => new Intl.NumberFormat('id-ID').format(Number(n) || 0);
@@ -20,10 +20,48 @@ function progress(goal) {
     return { target, current, pct: pct(current, target) };
 }
 
-function goalHTML(g) {
+function goalHTML(g, opts = {}) {
     let p = progress(g);
     let subgoalsHTML = (g.subgoals || []).map(s => `<div class="subgoal"><span>${escapeHTML(s.name)}</span><span>${fmt(s.current)} / ${fmt(s.target)}</span></div>`).join('');
-    return `<article class="goal-card"><div class="goal-card-head"><div><h3>${escapeHTML(g.name)}</h3><p>${fmt(p.current)} / ${fmt(p.target)} target</p></div><strong>${p.pct}%</strong></div><div class="progress-track"><i style="width:${p.pct}%"></i></div><div class="subgoals">${subgoalsHTML}</div></article>`;
+    let deleteBtn = opts.withDelete ? `<button class="delete-button" data-delete-goal="${g.id}" aria-label="Hapus goal">×</button>` : '';
+    return `<article class="goal-card"><div class="goal-card-head"><div><h3>${escapeHTML(g.name)}</h3><p>${fmt(p.current)} / ${fmt(p.target)} target</p></div><div class="goal-card-actions"><strong>${p.pct}%</strong>${deleteBtn}</div></div><div class="progress-track"><i style="width:${p.pct}%"></i></div><div class="subgoals">${subgoalsHTML}</div></article>`;
+}
+
+function chartSeries(mode) {
+    if (mode === 'month') {
+        let weeks = [];
+        for (let w = 3; w >= 0; w--) {
+            let dates = [];
+            for (let d = 6; d >= 0; d--) {
+                let day = new Date();
+                day.setDate(day.getDate() - (w * 7 + d));
+                dates.push(dayKey(day));
+            }
+            let ts = state.tasks.filter(t => dates.includes(t.task_date));
+            weeks.push({ label: `M${4 - w}`, value: pct(ts.filter(t => t.done).length, ts.length) });
+        }
+        return weeks;
+    }
+    let days = [];
+    for (let i = 6; i >= 0; i--) {
+        let d = new Date();
+        d.setDate(d.getDate() - i);
+        let dKey = dayKey(d);
+        let ts = state.tasks.filter(t => t.task_date === dKey);
+        days.push({ label: new Intl.DateTimeFormat('id-ID', { weekday: 'narrow' }).format(d), value: pct(ts.filter(t => t.done).length, ts.length) });
+    }
+    return days;
+}
+
+function chartBarsHTML(mode) {
+    return chartSeries(mode).map(p => `<div class="day-bar"><i style="height:${Math.max(p.value, 3)}%"></i><span>${escapeHTML(p.label)}</span></div>`).join('');
+}
+
+function chartToggleHTML(target, active) {
+    return `<div class="chart-toggle" role="group" aria-label="Rentang grafik">
+        <button type="button" class="toggle-btn ${active === 'week' ? 'active' : ''}" data-chart-target="${target}" data-chart-range="week">Per minggu</button>
+        <button type="button" class="toggle-btn ${active === 'month' ? 'active' : ''}" data-chart-target="${target}" data-chart-range="month">Per bulan</button>
+    </div>`;
 }
 
 function taskHTML(t) {
@@ -47,20 +85,14 @@ function render() {
     $('#overallPercent').textContent = `${pct(doneAll, totalTasks)}%`;
 
     $('#taskList').innerHTML = tasks.length ? tasks.map(taskHTML).join('') : '<div class="empty">Belum ada tugas untuk hari ini.<br>Tekan + untuk mulai.</div>';
-    let cards = state.goals.map(goalHTML).join('');
-    $('#goalSummary').innerHTML = cards || '<div class="empty">Belum ada goal.</div>';
-    $('#goalList').innerHTML = cards || '<div class="empty">Tambah goal pertamamu dengan tombol +.</div>';
+    $('#goalSummary').innerHTML = state.goals.map(g => goalHTML(g)).join('') || '<div class="empty">Belum ada goal.</div>';
+    $('#goalList').innerHTML = state.goals.map(g => goalHTML(g, { withDelete: true })).join('') || '<div class="empty">Tambah goal pertamamu dengan tombol +.</div>';
 
-    let chart = [];
-    for (let i = 6; i >= 0; i--) {
-        let d = new Date();
-        d.setDate(d.getDate() - i);
-        let dKey = dayKey(d);
-        let ts = state.tasks.filter(t => t.task_date === dKey),
-            v = pct(ts.filter(t => t.done).length, ts.length);
-        chart.push(`<div class="day-bar"><i style="height:${Math.max(v, 3)}%"></i><span>${new Intl.DateTimeFormat('id-ID', { weekday: 'narrow' }).format(d)}</span></div>`);
-    }
-    $('#weekChart').innerHTML = chart.join('');
+    $('#dashboardChartToggle').innerHTML = chartToggleHTML('dashboardChart', state.chartRange.dashboardChart);
+    $('#dashboardChart').innerHTML = chartBarsHTML(state.chartRange.dashboardChart);
+
+    $('#insightsChartToggle').innerHTML = chartToggleHTML('weekChart', state.chartRange.weekChart);
+    $('#weekChart').innerHTML = chartBarsHTML(state.chartRange.weekChart);
 }
 
 async function loadData() {
@@ -156,6 +188,22 @@ document.addEventListener('click', async e => {
         state.tasks = state.tasks.filter(t => t.id != del);
         await supabaseClient.from('daily_tasks').delete().eq('id', del);
         render();
+    }
+
+    let rangeBtn = e.target.closest('[data-chart-range]');
+    if (rangeBtn) {
+        state.chartRange[rangeBtn.dataset.chartTarget] = rangeBtn.dataset.chartRange;
+        render();
+    }
+
+    let delGoal = e.target.dataset.deleteGoal;
+    if (delGoal) {
+        if (confirm('Hapus goal ini beserta seluruh sub-goalnya?')) {
+            await supabaseClient.from('subgoals').delete().eq('goal_id', delGoal);
+            await supabaseClient.from('goals').delete().eq('id', delGoal);
+            state.goals = state.goals.filter(g => g.id != delGoal);
+            render();
+        }
     }
 });
 

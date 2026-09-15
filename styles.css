@@ -156,6 +156,31 @@ h2 {
     gap: 10px;
     justify-content: space-between;
 }
+.goal-card-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.chart-toggle {
+    display: flex;
+    gap: 8px;
+    margin: 4px 0 6px;
+}
+.toggle-btn {
+    border: 1px solid var(--line);
+    background: white;
+    color: var(--muted);
+    font: 12px inherit;
+    font-weight: 700;
+    padding: 7px 14px;
+    border-radius: 999px;
+    cursor: pointer;
+}
+.toggle-btn.active {
+    background: var(--teal);
+    border-color: var(--teal);
+    color: white;
+}
 .goal-card h3,
 .task-card h3 {
     font-size: 16px;
