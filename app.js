@@ -8,6 +8,20 @@ const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_
 
 let state = { goals: [], tasks: [], chartRange: { weekChart: 'week', dashboardChart: 'week' } };
 
+const UNITS = [
+    { value: 'angka', label: 'Angka' },
+    { value: 'rupiah', label: 'Rupiah' },
+    { value: 'kg', label: 'Kg' },
+    { value: 'gram', label: 'Gram' },
+    { value: 'meter', label: 'Meter' },
+    { value: 'km', label: 'Km' },
+    { value: 'liter', label: 'Liter' },
+    { value: 'menit', label: 'Menit' },
+    { value: 'jam', label: 'Jam' },
+    { value: 'kali', label: 'Kali' },
+];
+const unitLabel = v => UNITS.find(u => u.value === v)?.label || 'Angka';
+
 const dayKey = d => new Date(d || Date.now()).toISOString().slice(0, 10), today = dayKey();
 const fmt = n => new Intl.NumberFormat('id-ID').format(Number(n) || 0);
 const pct = (a, b) => b ? Math.min(100, Math.round(a / b * 100)) : 0;
@@ -15,16 +29,24 @@ const escapeHTML = s => String(s).replace(/[&<>\"]/g, c => ({ '&': '&amp;', '<':
 
 function progress(goal) {
     let subgoals = goal.subgoals || [];
-    let target = subgoals.reduce((a, s) => a + Number(s.target), 0),
-        current = subgoals.reduce((a, s) => a + Number(s.current), 0);
-    return { target, current, pct: pct(current, target) };
+    let total = subgoals.length;
+    let doneCount = subgoals.filter(s => s.done).length;
+    return { total, doneCount, pct: pct(doneCount, total) };
 }
 
 function goalHTML(g, opts = {}) {
     let p = progress(g);
-    let subgoalsHTML = (g.subgoals || []).map(s => `<div class="subgoal"><span>${escapeHTML(s.name)}</span><span>${fmt(s.current)} / ${fmt(s.target)}</span></div>`).join('');
+    let subgoalsHTML = (g.subgoals || []).map(s => `<div class="subgoal">
+        <label class="subgoal-check">
+            <input type="checkbox" data-subgoal-check="${s.id}" ${s.done ? 'checked' : ''} aria-label="Tandai sub-goal selesai">
+            <span class="subgoal-name">${escapeHTML(s.name)}</span>
+        </label>
+        <span class="subgoal-value">${fmt(s.target)} ${escapeHTML(unitLabel(s.unit))}</span>
+        ${opts.withDelete ? `<button class="delete-button" data-delete-subgoal="${s.id}" aria-label="Hapus sub-goal">×</button>` : ''}
+    </div>`).join('');
+    let addSubgoalBtn = opts.withDelete ? `<button class="text-button small" data-add-subgoal="${g.id}" type="button">+ Sub-goal</button>` : '';
     let deleteBtn = opts.withDelete ? `<button class="delete-button" data-delete-goal="${g.id}" aria-label="Hapus goal">×</button>` : '';
-    return `<article class="goal-card"><div class="goal-card-head"><div><h3>${escapeHTML(g.name)}</h3><p>${fmt(p.current)} / ${fmt(p.target)} target</p></div><div class="goal-card-actions"><strong>${p.pct}%</strong>${deleteBtn}</div></div><div class="progress-track"><i style="width:${p.pct}%"></i></div><div class="subgoals">${subgoalsHTML}</div></article>`;
+    return `<article class="goal-card"><div class="goal-card-head"><div><h3>${escapeHTML(g.name)}</h3><p>${p.doneCount} / ${p.total} sub-goal selesai</p></div><div class="goal-card-actions"><strong>${p.pct}%</strong>${deleteBtn}</div></div><div class="progress-track"><i style="width:${p.pct}%"></i></div><div class="subgoals">${subgoalsHTML}${addSubgoalBtn}</div></article>`;
 }
 
 function chartSeries(mode) {
@@ -107,13 +129,23 @@ async function loadData() {
     render();
 }
 
-function showForm(type) {
+function unitOptionsHTML(selected) {
+    return UNITS.map(u => `<option value="${u.value}" ${u.value === selected ? 'selected' : ''}>${u.label}</option>`).join('');
+}
+
+function showForm(type, goalId) {
     let options = state.goals.map(g => `<option value="${g.id}">${escapeHTML(g.name)}</option>`).join('');
-    $('#dialogTitle').textContent = type === 'task' ? 'Tambah tugas harian' : 'Tambah goal';
-    $('#formFields').innerHTML = type === 'task' ? 
-        `<div class="field"><label>Nama tugas</label><input name="name" required placeholder="Contoh: Workout 30 menit"></div><div class="field"><label>Terhubung ke goal</label><select name="goalId"><option value="">Tanpa goal</option>${options}</select></div>` : 
-        `<div class="field"><label>Nama goal</label><input name="name" required placeholder="Contoh: Dana darurat"></div><div class="field"><label>Sub-goal pertama</label><input name="subgoal" required placeholder="Contoh: Tabung 10 juta"></div><div class="field"><label>Target angka</label><input name="target" required min="1" type="number" placeholder="10000000"></div>`;
+    let titles = { task: 'Tambah tugas harian', goal: 'Tambah goal', subgoal: 'Tambah sub-goal' };
+    $('#dialogTitle').textContent = titles[type];
+    if (type === 'task') {
+        $('#formFields').innerHTML = `<div class="field"><label>Nama tugas</label><input name="name" required placeholder="Contoh: Workout 30 menit"></div><div class="field"><label>Terhubung ke goal</label><select name="goalId"><option value="">Tanpa goal</option>${options}</select></div>`;
+    } else if (type === 'goal') {
+        $('#formFields').innerHTML = `<div class="field"><label>Nama goal</label><input name="name" required placeholder="Contoh: Dana darurat"></div><div class="field"><label>Sub-goal pertama</label><input name="subgoal" required placeholder="Contoh: Tabung 10 juta"></div><div class="field"><label>Target angka</label><input name="target" required min="0" step="any" type="number" placeholder="10000000"></div><div class="field"><label>Satuan</label><select name="unit">${unitOptionsHTML('angka')}</select></div>`;
+    } else if (type === 'subgoal') {
+        $('#formFields').innerHTML = `<div class="field"><label>Nama sub-goal</label><input name="name" required placeholder="Contoh: Tabung 3 juta"></div><div class="field"><label>Target angka</label><input name="target" required min="0" step="any" type="number" placeholder="3000000"></div><div class="field"><label>Satuan</label><select name="unit">${unitOptionsHTML('angka')}</select></div>`;
+    }
     $('#entryForm').dataset.type = type;
+    $('#entryForm').dataset.goalId = goalId || '';
     $('#entryDialog').showModal();
 }
 
@@ -135,6 +167,23 @@ $('#entryForm').addEventListener('submit', async e => {
         } else {
             console.error("Insert Task Error:", error);
         }
+    } else if (type === 'subgoal') {
+        let goalId = e.currentTarget.dataset.goalId;
+        let newSubgoal = {
+            goal_id: goalId,
+            name: f.get('name'),
+            target: Number(f.get('target')),
+            unit: f.get('unit') || 'angka',
+            done: false
+        };
+        const { data, error } = await supabaseClient.from('subgoals').insert([newSubgoal]).select();
+        if (!error && data) {
+            let g = state.goals.find(g => g.id == goalId);
+            if (g) { g.subgoals = g.subgoals || []; g.subgoals.push(data[0]); }
+            render();
+        } else {
+            console.error("Insert Subgoal Error:", error);
+        }
     } else {
         let newGoal = { name: f.get('name') };
         const { data: goalData, error: goalError } = await supabaseClient.from('goals').insert([newGoal]).select();
@@ -145,7 +194,8 @@ $('#entryForm').addEventListener('submit', async e => {
                 goal_id: createdGoal.id,
                 name: f.get('subgoal'),
                 target: Number(f.get('target')),
-                current: 0
+                unit: f.get('unit') || 'angka',
+                done: false
             };
             const { data: subData, error: subError } = await supabaseClient.from('subgoals').insert([newSubgoal]).select();
             
@@ -182,6 +232,19 @@ document.addEventListener('click', async e => {
             render();
         }
     }
+
+    let sgId = e.target.dataset.subgoalCheck;
+    if (sgId) {
+        for (let g of state.goals) {
+            let sg = (g.subgoals || []).find(s => s.id == sgId);
+            if (sg) {
+                sg.done = e.target.checked;
+                await supabaseClient.from('subgoals').update({ done: sg.done }).eq('id', sgId);
+                break;
+            }
+        }
+        render();
+    }
     
     let del = e.target.dataset.deleteTask;
     if (del) {
@@ -189,6 +252,16 @@ document.addEventListener('click', async e => {
         await supabaseClient.from('daily_tasks').delete().eq('id', del);
         render();
     }
+
+    let delSubgoal = e.target.dataset.deleteSubgoal;
+    if (delSubgoal) {
+        await supabaseClient.from('subgoals').delete().eq('id', delSubgoal);
+        for (let g of state.goals) g.subgoals = (g.subgoals || []).filter(s => s.id != delSubgoal);
+        render();
+    }
+
+    let addSubgoal = e.target.dataset.addSubgoal;
+    if (addSubgoal) showForm('subgoal', addSubgoal);
 
     let rangeBtn = e.target.closest('[data-chart-range]');
     if (rangeBtn) {

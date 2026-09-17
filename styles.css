@@ -125,6 +125,10 @@ h2 {
     font-weight: 700;
     cursor: pointer;
 }
+.text-button.small {
+    font-size: 13px;
+    padding: 6px 0 0;
+}
 .round-button {
     background: var(--teal);
     color: white;
@@ -209,9 +213,50 @@ h2 {
 }
 .subgoal {
     display: flex;
+    align-items: center;
     justify-content: space-between;
+    gap: 8px;
     padding: 6px 0;
     font-size: 13px;
+}
+.subgoal-check {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    flex: 1;
+    min-width: 0;
+}
+.subgoal-check input {
+    appearance: none;
+    width: 19px;
+    height: 19px;
+    margin: 0;
+    flex: 0 0 auto;
+    border: 2px solid #b3c8c1;
+    border-radius: 6px;
+    cursor: pointer;
+}
+.subgoal-check input:checked {
+    border-color: var(--teal);
+    background: var(--teal);
+    background-image: linear-gradient(45deg, transparent 45%, white 46% 55%, transparent 56%),
+        linear-gradient(-45deg, transparent 45%, white 46% 55%, transparent 56%);
+}
+.subgoal-check input:checked + .subgoal-name {
+    text-decoration: line-through;
+    color: var(--muted);
+}
+.subgoal-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.subgoal-value {
+    color: var(--muted);
+    font-size: 12px;
+    flex: 0 0 auto;
+    white-space: nowrap;
 }
 .small {
     font-size: 12px;
