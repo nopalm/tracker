@@ -246,7 +246,7 @@ function showForm(type, goalId) {
     let titles = { task: 'Tambah tugas harian', goal: 'Tambah goal', subgoal: 'Tambah sub-goal' };
     $('#dialogTitle').textContent = titles[type];
     if (type === 'task') {
-        $('#formFields').innerHTML = `<div class="field"><label>Nama tugas</label><input name="name" required placeholder="Contoh: Workout 30 menit"></div><div class="field"><label>Terhubung ke goal</label><select name="goalId"><option value="">Tanpa goal</option>${options}</select></div>`;
+        $('#formFields').innerHTML = `<div class="field"><label>Nama aktivitas</label><input name="activity" required placeholder="Contoh: Push Up"></div><div class="field"><label>Jumlah</label><input name="amount" required min="0" step="any" type="number" placeholder="10"></div><div class="field"><label>Satuan</label><select name="unit" required>${unitOptionsHTML('kali')}</select></div><div class="field"><label>Terhubung ke goal</label><select name="goalId"><option value="">Tanpa goal</option>${options}</select></div>`;
     } else if (type === 'goal') {
         $('#formFields').innerHTML = `<div class="field"><label>Nama goal</label><input name="name" required placeholder="Contoh: Dana darurat"></div><div class="field"><label>Sub-goal pertama</label><input name="subgoal" required placeholder="Contoh: Tabung 10 juta"></div><div class="field"><label>Target angka</label><input name="target" required min="0" step="any" type="number" placeholder="10000000"></div><div class="field"><label>Satuan</label><select name="unit">${unitOptionsHTML('angka')}</select></div>`;
     } else if (type === 'subgoal') {
@@ -262,8 +262,11 @@ $('#entryForm').addEventListener('submit', async e => {
     let f = new FormData(e.currentTarget), type = e.currentTarget.dataset.type;
 
     if (type === 'task') {
+        let activity = (f.get('activity') || '').trim();
+        let amount = f.get('amount');
+        let unit = f.get('unit') || 'kali';
         let newTask = {
-            name: f.get('name'),
+            name: `${activity} ${amount} ${unitLabel(unit)}`,
             goal_id: f.get('goalId') || null,
             task_date: today,
             done: false
@@ -277,7 +280,10 @@ $('#entryForm').addEventListener('submit', async e => {
         }
     } else if (type === 'taskEdit') {
         let id = e.currentTarget.dataset.id;
-        let updated = { name: f.get('name'), task_date: f.get('date'), goal_id: f.get('goalId') || null };
+        let activity = (f.get('activity') || '').trim();
+        let amount = f.get('amount');
+        let unit = f.get('unit') || 'kali';
+        let updated = { name: `${activity} ${amount} ${unitLabel(unit)}`, task_date: f.get('date'), goal_id: f.get('goalId') || null };
         const { error } = await supabaseClient.from('daily_tasks').update(updated).eq('id', id);
         if (!error) {
             let t = state.tasks.find(t => t.id == id);
@@ -358,9 +364,10 @@ function showLogEditForm(entry) {
 }
 
 function showTaskEditForm(t) {
+    let parsed = parseLogText(t.name);
     let options = state.goals.map(g => `<option value="${g.id}" ${g.id === t.goal_id ? 'selected' : ''}>${escapeHTML(g.name)}</option>`).join('');
     $('#dialogTitle').textContent = 'Edit tugas';
-    $('#formFields').innerHTML = `<div class="field"><label>Nama tugas</label><input name="name" required value="${escapeHTML(t.name)}" placeholder="Contoh: Joging 45 menit"></div><div class="field"><label>Tanggal</label><input name="date" type="date" required value="${t.task_date}"></div><div class="field"><label>Terhubung ke goal</label><select name="goalId"><option value="">Tanpa goal</option>${options}</select></div>`;
+    $('#formFields').innerHTML = `<div class="field"><label>Nama aktivitas</label><input name="activity" required value="${escapeHTML(parsed.activity || t.name)}" placeholder="Contoh: Push Up"></div><div class="field"><label>Jumlah</label><input name="amount" required min="0" step="any" type="number" value="${parsed.amount ?? ''}"></div><div class="field"><label>Satuan</label><select name="unit" required>${unitOptionsHTML(parsed.unit || 'kali')}</select></div><div class="field"><label>Tanggal</label><input name="date" type="date" required value="${t.task_date}"></div><div class="field"><label>Terhubung ke goal</label><select name="goalId"><option value="">Tanpa goal</option>${options}</select></div>`;
     $('#entryForm').dataset.type = 'taskEdit';
     $('#entryForm').dataset.id = t.id;
     $('#entryDialog').showModal();
