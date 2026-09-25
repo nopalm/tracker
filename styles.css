@@ -317,7 +317,7 @@ h2 {
     z-index: 4;
 }
 .bottom-nav button {
-    width: min(170px, 25vw);
+    width: min(150px, 20vw);
     padding: 10px 5px 13px;
     background: none;
     border: 0;
@@ -372,6 +372,103 @@ h2 {
 }
 .info-card p {
     margin-bottom: 0;
+}
+.log-form {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 18px;
+}
+.log-form input {
+    border: 1px solid #c8dad4;
+    border-radius: 11px;
+    padding: 12px;
+    font: inherit;
+    background: white;
+    color: var(--ink);
+}
+.log-form input[name="text"] {
+    flex: 1;
+    min-width: 0;
+}
+.log-form input[type="date"] {
+    flex: 0 0 auto;
+    width: 138px;
+}
+.log-form button {
+    flex: 0 0 auto;
+}
+.log-totals-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 9px;
+    margin: 0 0 24px;
+}
+.log-totals-grid article {
+    background: white;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 13px;
+}
+.log-totals-grid span {
+    display: block;
+    color: var(--muted);
+    font-size: 11px;
+}
+.log-totals-grid strong {
+    font-size: 18px;
+    display: block;
+    margin: 2px 0;
+}
+.log-totals-grid small {
+    color: var(--muted);
+    font-size: 11px;
+}
+.log-history {
+    display: grid;
+    gap: 18px;
+}
+.log-day-label {
+    font-size: 12px;
+    font-weight: 800;
+    color: var(--teal);
+    text-transform: capitalize;
+    margin: 0 0 8px;
+}
+.log-day-group {
+    display: grid;
+    gap: 8px;
+}
+.log-entry {
+    background: white;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 12px 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+.log-entry-main {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.log-entry-main strong {
+    font-size: 14px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.log-entry-value {
+    font-size: 12px;
+    color: var(--muted);
+}
+.log-entry-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex: 0 0 auto;
 }
 dialog {
     border: 0;

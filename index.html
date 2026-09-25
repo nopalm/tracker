@@ -46,6 +46,17 @@
         <div id="taskList" class="task-list"></div>
       </section>
 
+      <section id="history" class="view" aria-labelledby="historyTitle">
+        <div class="section-heading"><div><p class="eyebrow">RIWAYAT</p><h2 id="historyTitle">Catatan harian</h2></div></div>
+        <form id="logForm" class="log-form">
+          <input id="logText" name="text" required placeholder="Contoh: Joging 45 menit" autocomplete="off">
+          <input id="logDate" name="date" type="date" required>
+          <button type="submit" class="round-button" aria-label="Tambah catatan">+</button>
+        </form>
+        <div id="logTotals"></div>
+        <div id="logHistory" class="log-history"></div>
+      </section>
+
       <section id="goals" class="view" aria-labelledby="goalsTitle">
         <div class="section-heading"><div><p class="eyebrow">ARAH BESAR</p><h2 id="goalsTitle">Goal & target</h2></div><button class="round-button" id="addGoalButton" type="button" aria-label="Tambah goal">+</button></div>
         <div id="goalList" class="goal-list"></div>
@@ -62,6 +73,7 @@
     <nav class="bottom-nav" aria-label="Navigasi utama">
       <button class="active" data-nav="dashboard" type="button"><span>⌂</span>Beranda</button>
       <button data-nav="today" type="button"><span>✓</span>Harian</button>
+      <button data-nav="history" type="button"><span>▤</span>Riwayat</button>
       <button data-nav="goals" type="button"><span>◎</span>Goal</button>
       <button data-nav="insights" type="button"><span>⌁</span>Progres</button>
     </nav>

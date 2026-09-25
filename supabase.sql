@@ -25,6 +25,17 @@ create table if not exists public.daily_tasks (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.log_entries (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users(id) on delete cascade,
+  text text not null,
+  activity text,
+  amount numeric,
+  unit text,
+  entry_date date not null default current_date,
+  created_at timestamptz not null default now()
+);
+
 alter table public.goals enable row level security;
 alter table public.daily_tasks enable row level security;
 create policy "Users manage own goals" on public.goals for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
@@ -32,3 +43,6 @@ create policy "Users manage own tasks" on public.daily_tasks for all using (auth
 -- Subgoal access follows ownership of its parent goal.
 alter table public.subgoals enable row level security;
 create policy "Users manage own subgoals" on public.subgoals for all using (exists (select 1 from public.goals g where g.id = goal_id and g.user_id = auth.uid())) with check (exists (select 1 from public.goals g where g.id = goal_id and g.user_id = auth.uid()));
+-- user_id boleh kosong agar catatan tetap bisa disimpan sebelum login diaktifkan di aplikasi.
+alter table public.log_entries enable row level security;
+create policy "Users manage own or anonymous logs" on public.log_entries for all using (user_id is null or auth.uid() = user_id) with check (user_id is null or auth.uid() = user_id);

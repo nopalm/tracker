@@ -7,6 +7,7 @@ PWA mobile-first untuk tracker goal, target, dan tugas harian. Aplikasi bekerja 
 - Dashboard progres harian dan total
 - Goal, sub-goal, dan target angka
 - Tugas harian dengan checklist
+- **Riwayat catatan harian**: ketik bebas seperti "Joging 45 menit", angka dan satuannya otomatis diambil, dijumlahkan per aktivitas, diurutkan per tanggal, dan bisa diedit/dihapus kapan saja
 - Grafik konsistensi 7 hari
 - Data lokal di browser (tidak hilang saat aplikasi ditutup)
 
@@ -19,4 +20,4 @@ PWA mobile-first untuk tracker goal, target, dan tugas harian. Aplikasi bekerja 
 
 ## Database cloud (Supabase)
 
-Untuk sinkronisasi antar perangkat dan login, buat project Supabase gratis lalu jalankan file `supabase.sql` di **SQL Editor**. Setelah kredensial project tersedia, aplikasi dapat dihubungkan ke tabel tersebut melalui Supabase JavaScript client. Versi ini sengaja memakai penyimpanan lokal terlebih dahulu agar langsung dapat dipakai tanpa akun atau API key.
+Untuk sinkronisasi antar perangkat dan login, buat project Supabase gratis lalu jalankan file `supabase.sql` di **SQL Editor** (termasuk tabel baru `log_entries` untuk fitur Riwayat). Setelah kredensial project tersedia, aplikasi dapat dihubungkan ke tabel tersebut melalui Supabase JavaScript client. Versi ini sengaja memakai penyimpanan lokal terlebih dahulu agar langsung dapat dipakai tanpa akun atau API key.

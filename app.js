@@ -6,7 +6,7 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 
 const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-let state = { goals: [], tasks: [], chartRange: { weekChart: 'week', dashboardChart: 'week' } };
+let state = { goals: [], tasks: [], logs: [], chartRange: { weekChart: 'week', dashboardChart: 'week' } };
 
 const UNITS = [
     { value: 'angka', label: 'Angka' },
@@ -21,6 +21,31 @@ const UNITS = [
     { value: 'kali', label: 'Kali' },
 ];
 const unitLabel = v => UNITS.find(u => u.value === v)?.label || 'Angka';
+
+// Alias kata satuan yang biasa dipakai orang saat mengetik cepat, dipetakan ke UNITS di atas.
+const UNIT_ALIASES = {
+    menit: 'menit', min: 'menit', mnt: 'menit',
+    jam: 'jam', j: 'jam',
+    km: 'km', kilometer: 'km',
+    meter: 'meter', mtr: 'meter',
+    kg: 'kg', kilogram: 'kg',
+    gram: 'gram', gr: 'gram',
+    liter: 'liter', ltr: 'liter',
+    kali: 'kali', x: 'kali',
+    rupiah: 'rupiah', rp: 'rupiah',
+};
+
+// Mengambil angka + satuan dari teks bebas, contoh: "Joging 45 menit" -> { activity: "Joging", amount: 45, unit: "menit" }
+function parseLogText(text) {
+    text = String(text || '').trim();
+    let m = text.match(/^(.*?)[\s,:\-]*([\d]+(?:[.,]\d+)?)\s*([a-zA-Z]+)?\s*$/);
+    if (!m || !m[2]) return { activity: text, amount: null, unit: null };
+    let name = m[1].trim() || text;
+    let amount = Number(m[2].replace(',', '.'));
+    let unitKey = m[3] ? (UNIT_ALIASES[m[3].toLowerCase()] || m[3].toLowerCase()) : null;
+    if (unitKey && !UNITS.find(u => u.value === unitKey)) unitKey = 'angka';
+    return { activity: name, amount, unit: unitKey || 'angka' };
+}
 
 const dayKey = d => new Date(d || Date.now()).toISOString().slice(0, 10), today = dayKey();
 const fmt = n => new Intl.NumberFormat('id-ID').format(Number(n) || 0);
@@ -91,6 +116,49 @@ function taskHTML(t) {
     return `<article class="task-card ${t.done ? 'done' : ''}"><input data-task-check="${t.id}" type="checkbox" ${t.done ? 'checked' : ''} aria-label="Selesai"><div class="task-content"><h3>${escapeHTML(t.name)}</h3><p>${g ? escapeHTML(g.name) : 'Tanpa goal'}</p></div><button class="delete-button" data-delete-task="${t.id}" aria-label="Hapus tugas">×</button></article>`;
 }
 
+function logEntryHTML(l) {
+    let valueLabel = (l.amount !== null && l.amount !== undefined && l.amount !== '') ? `${fmt(l.amount)} ${unitLabel(l.unit)}` : '';
+    return `<div class="log-entry">
+        <div class="log-entry-main">
+            <strong>${escapeHTML(l.activity || l.text)}</strong>
+            ${valueLabel ? `<span class="log-entry-value">${escapeHTML(valueLabel)}</span>` : ''}
+        </div>
+        <div class="log-entry-actions">
+            <button class="text-button small" data-edit-log="${l.id}" type="button">Edit</button>
+            <button class="delete-button" data-delete-log="${l.id}" aria-label="Hapus catatan">×</button>
+        </div>
+    </div>`;
+}
+
+function logGroupHTML(dateKey, entries) {
+    let label = new Intl.DateTimeFormat('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(new Date(dateKey + 'T00:00:00'));
+    return `<div class="log-day-group"><p class="log-day-label">${escapeHTML(label)}</p>${entries.map(logEntryHTML).join('')}</div>`;
+}
+
+function logTotalsHTML() {
+    let totals = {};
+    for (let l of state.logs) {
+        if (l.amount === null || l.amount === undefined || l.amount === '') continue;
+        let key = `${(l.activity || l.text || '').trim().toLowerCase()}|${l.unit || 'angka'}`;
+        if (!totals[key]) totals[key] = { name: l.activity || l.text, unit: l.unit, sum: 0, count: 0 };
+        totals[key].sum += Number(l.amount) || 0;
+        totals[key].count += 1;
+    }
+    let list = Object.values(totals).sort((a, b) => b.sum - a.sum);
+    if (!list.length) return '';
+    return `<div class="section-heading"><div><p class="eyebrow">TOTAL</p><h2>Total per aktivitas</h2></div></div>
+    <div class="log-totals-grid">${list.map(t => `<article><span>${escapeHTML(t.name)}</span><strong>${fmt(t.sum)} ${escapeHTML(unitLabel(t.unit))}</strong><small>${t.count}x dicatat</small></article>`).join('')}</div>`;
+}
+
+function renderHistory() {
+    let groups = {};
+    for (let l of state.logs) (groups[l.entry_date] ||= []).push(l);
+    for (let k in groups) groups[k].sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+    let dateKeys = Object.keys(groups).sort((a, b) => b.localeCompare(a));
+    $('#logTotals').innerHTML = logTotalsHTML();
+    $('#logHistory').innerHTML = dateKeys.length ? dateKeys.map(k => logGroupHTML(k, groups[k])).join('') : '<div class="empty">Belum ada catatan.<br>Tambahkan catatan pertamamu di atas, contoh: "Joging 45 menit".</div>';
+}
+
 function render() {
     let tasks = state.tasks.filter(t => t.task_date === today),
         done = tasks.filter(t => t.done).length,
@@ -115,17 +183,22 @@ function render() {
 
     $('#insightsChartToggle').innerHTML = chartToggleHTML('weekChart', state.chartRange.weekChart);
     $('#weekChart').innerHTML = chartBarsHTML(state.chartRange.weekChart);
+
+    renderHistory();
 }
 
 async function loadData() {
     const { data: goalsData, error: goalError } = await supabaseClient.from('goals').select('*, subgoals(*)');
     const { data: tasksData, error: taskError } = await supabaseClient.from('daily_tasks').select('*');
-    
+    const { data: logsData, error: logError } = await supabaseClient.from('log_entries').select('*').order('entry_date', { ascending: false });
+
     if (goalError) console.error("Goal Error:", goalError);
     if (taskError) console.error("Task Error:", taskError);
-    
+    if (logError) console.error("Log Error:", logError);
+
     if (!goalError && goalsData) state.goals = goalsData;
     if (!taskError && tasksData) state.tasks = tasksData;
+    if (!logError && logsData) state.logs = logsData;
     render();
 }
 
@@ -166,6 +239,20 @@ $('#entryForm').addEventListener('submit', async e => {
             render();
         } else {
             console.error("Insert Task Error:", error);
+        }
+    } else if (type === 'logEdit') {
+        let id = e.currentTarget.dataset.id;
+        let text = (f.get('text') || '').trim();
+        let date = f.get('date');
+        let parsed = parseLogText(text);
+        let updated = { text, entry_date: date, activity: parsed.activity, amount: parsed.amount, unit: parsed.unit };
+        const { error } = await supabaseClient.from('log_entries').update(updated).eq('id', id);
+        if (!error) {
+            let entry = state.logs.find(l => l.id == id);
+            if (entry) Object.assign(entry, updated);
+            render();
+        } else {
+            console.error("Update Log Error:", error);
         }
     } else if (type === 'subgoal') {
         let goalId = e.currentTarget.dataset.goalId;
@@ -214,6 +301,34 @@ $('#entryForm').addEventListener('submit', async e => {
 
 $('#addTaskButton').onclick = () => showForm('task');
 $('#addGoalButton').onclick = () => showForm('goal');
+$('#logDate').value = today;
+
+function showLogEditForm(entry) {
+    $('#dialogTitle').textContent = 'Edit catatan';
+    $('#formFields').innerHTML = `<div class="field"><label>Catatan</label><input name="text" required value="${escapeHTML(entry.text || '')}" placeholder="Contoh: Joging 45 menit"></div><div class="field"><label>Tanggal</label><input name="date" type="date" required value="${entry.entry_date}"></div>`;
+    $('#entryForm').dataset.type = 'logEdit';
+    $('#entryForm').dataset.id = entry.id;
+    $('#entryDialog').showModal();
+}
+
+$('#logForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    let f = new FormData(e.currentTarget);
+    let text = (f.get('text') || '').trim();
+    let date = f.get('date') || today;
+    if (!text) return;
+    let parsed = parseLogText(text);
+    let newLog = { text, entry_date: date, activity: parsed.activity, amount: parsed.amount, unit: parsed.unit };
+    const { data, error } = await supabaseClient.from('log_entries').insert([newLog]).select();
+    if (!error && data) {
+        state.logs.push(data[0]);
+        e.currentTarget.reset();
+        $('#logDate').value = today;
+        render();
+    } else {
+        console.error("Insert Log Error:", error);
+    }
+});
 
 document.addEventListener('click', async e => {
     let nav = e.target.closest('[data-nav]')?.dataset.nav;
@@ -262,6 +377,19 @@ document.addEventListener('click', async e => {
 
     let addSubgoal = e.target.dataset.addSubgoal;
     if (addSubgoal) showForm('subgoal', addSubgoal);
+
+    let editLogId = e.target.dataset.editLog;
+    if (editLogId) {
+        let entry = state.logs.find(l => l.id == editLogId);
+        if (entry) showLogEditForm(entry);
+    }
+
+    let delLog = e.target.dataset.deleteLog;
+    if (delLog) {
+        state.logs = state.logs.filter(l => l.id != delLog);
+        await supabaseClient.from('log_entries').delete().eq('id', delLog);
+        render();
+    }
 
     let rangeBtn = e.target.closest('[data-chart-range]');
     if (rangeBtn) {
