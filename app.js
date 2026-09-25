@@ -6,7 +6,7 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 
 const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-let state = { goals: [], tasks: [], logs: [], chartRange: { weekChart: 'week', dashboardChart: 'week' } };
+let state = { goals: [], tasks: [], logs: [], chartRange: { weekChart: 'day', dashboardChart: 'day' } };
 
 const UNITS = [
     { value: 'angka', label: 'Angka' },
@@ -76,16 +76,30 @@ function goalHTML(g, opts = {}) {
 
 function chartSeries(mode) {
     if (mode === 'month') {
+        let months = [];
+        for (let m = 5; m >= 0; m--) {
+            let d = new Date();
+            d.setDate(1);
+            d.setMonth(d.getMonth() - m);
+            let monthKey = d.toISOString().slice(0, 7);
+            let count = state.tasks.filter(t => t.done && (t.task_date || '').slice(0, 7) === monthKey).length;
+            months.push({ label: new Intl.DateTimeFormat('id-ID', { month: 'short' }).format(d), value: count });
+        }
+        return months;
+    }
+    if (mode === 'week') {
         let weeks = [];
-        for (let w = 3; w >= 0; w--) {
+        for (let w = 7; w >= 0; w--) {
             let dates = [];
             for (let d = 6; d >= 0; d--) {
                 let day = new Date();
                 day.setDate(day.getDate() - (w * 7 + d));
                 dates.push(dayKey(day));
             }
-            let ts = state.tasks.filter(t => dates.includes(t.task_date));
-            weeks.push({ label: `M${4 - w}`, value: pct(ts.filter(t => t.done).length, ts.length) });
+            let weekStart = new Date();
+            weekStart.setDate(weekStart.getDate() - (w * 7 + 6));
+            let count = state.tasks.filter(t => t.done && dates.includes(t.task_date)).length;
+            weeks.push({ label: new Intl.DateTimeFormat('id-ID', { day: 'numeric', month: 'short' }).format(weekStart), value: count });
         }
         return weeks;
     }
@@ -94,18 +108,21 @@ function chartSeries(mode) {
         let d = new Date();
         d.setDate(d.getDate() - i);
         let dKey = dayKey(d);
-        let ts = state.tasks.filter(t => t.task_date === dKey);
-        days.push({ label: new Intl.DateTimeFormat('id-ID', { weekday: 'narrow' }).format(d), value: pct(ts.filter(t => t.done).length, ts.length) });
+        let count = state.tasks.filter(t => t.done && t.task_date === dKey).length;
+        days.push({ label: new Intl.DateTimeFormat('id-ID', { day: 'numeric', month: 'short' }).format(d), value: count });
     }
     return days;
 }
 
 function chartBarsHTML(mode) {
-    return chartSeries(mode).map(p => `<div class="day-bar"><i style="height:${Math.max(p.value, 3)}%"></i><span>${escapeHTML(p.label)}</span></div>`).join('');
+    let series = chartSeries(mode);
+    let max = Math.max(1, ...series.map(p => p.value));
+    return series.map(p => `<div class="day-bar"><span class="day-bar-value">${fmt(p.value)}</span><i style="height:${p.value > 0 ? Math.max(Math.round(p.value / max * 100), 8) : 3}%"></i><span>${escapeHTML(p.label)}</span></div>`).join('');
 }
 
 function chartToggleHTML(target, active) {
     return `<div class="chart-toggle" role="group" aria-label="Rentang grafik">
+        <button type="button" class="toggle-btn ${active === 'day' ? 'active' : ''}" data-chart-target="${target}" data-chart-range="day">Per hari</button>
         <button type="button" class="toggle-btn ${active === 'week' ? 'active' : ''}" data-chart-target="${target}" data-chart-range="week">Per minggu</button>
         <button type="button" class="toggle-btn ${active === 'month' ? 'active' : ''}" data-chart-target="${target}" data-chart-range="month">Per bulan</button>
     </div>`;
