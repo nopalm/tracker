@@ -113,7 +113,40 @@ function chartToggleHTML(target, active) {
 
 function taskHTML(t) {
     let g = state.goals.find(g => g.id === t.goal_id);
-    return `<article class="task-card ${t.done ? 'done' : ''}"><input data-task-check="${t.id}" type="checkbox" ${t.done ? 'checked' : ''} aria-label="Selesai"><div class="task-content"><h3>${escapeHTML(t.name)}</h3><p>${g ? escapeHTML(g.name) : 'Tanpa goal'}</p></div><button class="delete-button" data-delete-task="${t.id}" aria-label="Hapus tugas">×</button></article>`;
+    let parsed = parseLogText(t.name);
+    let valueLabel = (parsed.amount !== null && parsed.amount !== undefined) ? `${fmt(parsed.amount)} ${unitLabel(parsed.unit)}` : '';
+    return `<article class="task-card ${t.done ? 'done' : ''}"><input data-task-check="${t.id}" type="checkbox" ${t.done ? 'checked' : ''} aria-label="Selesai"><div class="task-content"><h3>${escapeHTML(t.name)}</h3><p>${g ? escapeHTML(g.name) : (valueLabel ? escapeHTML(valueLabel) : 'Tanpa goal')}</p></div><div class="log-entry-actions"><button class="text-button small" data-edit-task="${t.id}" type="button">Edit</button><button class="delete-button" data-delete-task="${t.id}" aria-label="Hapus tugas">×</button></div></article>`;
+}
+
+function taskGroupHTML(dateKey, tasksForDate) {
+    let label = new Intl.DateTimeFormat('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(new Date(dateKey + 'T00:00:00'));
+    return `<div class="log-day-group"><p class="log-day-label">${escapeHTML(label)}</p>${tasksForDate.map(taskHTML).join('')}</div>`;
+}
+
+function taskTotalsHTML() {
+    let totals = {};
+    for (let t of state.tasks) {
+        if (!t.done) continue;
+        let parsed = parseLogText(t.name);
+        if (parsed.amount === null || parsed.amount === undefined) continue;
+        let key = `${parsed.activity.trim().toLowerCase()}|${parsed.unit}`;
+        if (!totals[key]) totals[key] = { name: parsed.activity, unit: parsed.unit, sum: 0, count: 0 };
+        totals[key].sum += Number(parsed.amount) || 0;
+        totals[key].count += 1;
+    }
+    let list = Object.values(totals).sort((a, b) => b.sum - a.sum);
+    if (!list.length) return '';
+    return `<div class="section-heading"><div><p class="eyebrow">TOTAL</p><h2>Total tugas selesai</h2></div></div>
+    <div class="log-totals-grid">${list.map(t => `<article><span>${escapeHTML(t.name)}</span><strong>${fmt(t.sum)} ${escapeHTML(unitLabel(t.unit))}</strong><small>${t.count}x selesai</small></article>`).join('')}</div>`;
+}
+
+function renderTaskHistory() {
+    let groups = {};
+    for (let t of state.tasks) (groups[t.task_date] ||= []).push(t);
+    for (let k in groups) groups[k].sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+    let dateKeys = Object.keys(groups).sort((a, b) => b.localeCompare(a));
+    $('#taskTotals').innerHTML = taskTotalsHTML();
+    $('#taskHistory').innerHTML = dateKeys.length ? dateKeys.map(k => taskGroupHTML(k, groups[k])).join('') : '<div class="empty">Belum ada tugas.</div>';
 }
 
 function logEntryHTML(l) {
@@ -178,6 +211,8 @@ function render() {
     $('#goalSummary').innerHTML = state.goals.map(g => goalHTML(g)).join('') || '<div class="empty">Belum ada goal.</div>';
     $('#goalList').innerHTML = state.goals.map(g => goalHTML(g, { withDelete: true })).join('') || '<div class="empty">Tambah goal pertamamu dengan tombol +.</div>';
 
+    renderTaskHistory();
+
     $('#dashboardChartToggle').innerHTML = chartToggleHTML('dashboardChart', state.chartRange.dashboardChart);
     $('#dashboardChart').innerHTML = chartBarsHTML(state.chartRange.dashboardChart);
 
@@ -239,6 +274,17 @@ $('#entryForm').addEventListener('submit', async e => {
             render();
         } else {
             console.error("Insert Task Error:", error);
+        }
+    } else if (type === 'taskEdit') {
+        let id = e.currentTarget.dataset.id;
+        let updated = { name: f.get('name'), task_date: f.get('date'), goal_id: f.get('goalId') || null };
+        const { error } = await supabaseClient.from('daily_tasks').update(updated).eq('id', id);
+        if (!error) {
+            let t = state.tasks.find(t => t.id == id);
+            if (t) Object.assign(t, updated);
+            render();
+        } else {
+            console.error("Update Task Error:", error);
         }
     } else if (type === 'logEdit') {
         let id = e.currentTarget.dataset.id;
@@ -311,6 +357,15 @@ function showLogEditForm(entry) {
     $('#entryDialog').showModal();
 }
 
+function showTaskEditForm(t) {
+    let options = state.goals.map(g => `<option value="${g.id}" ${g.id === t.goal_id ? 'selected' : ''}>${escapeHTML(g.name)}</option>`).join('');
+    $('#dialogTitle').textContent = 'Edit tugas';
+    $('#formFields').innerHTML = `<div class="field"><label>Nama tugas</label><input name="name" required value="${escapeHTML(t.name)}" placeholder="Contoh: Joging 45 menit"></div><div class="field"><label>Tanggal</label><input name="date" type="date" required value="${t.task_date}"></div><div class="field"><label>Terhubung ke goal</label><select name="goalId"><option value="">Tanpa goal</option>${options}</select></div>`;
+    $('#entryForm').dataset.type = 'taskEdit';
+    $('#entryForm').dataset.id = t.id;
+    $('#entryDialog').showModal();
+}
+
 $('#logForm').addEventListener('submit', async e => {
     e.preventDefault();
     let f = new FormData(e.currentTarget);
@@ -346,6 +401,12 @@ document.addEventListener('click', async e => {
             await supabaseClient.from('daily_tasks').update({ done: t.done }).eq('id', id);
             render();
         }
+    }
+
+    let editTaskId = e.target.dataset.editTask;
+    if (editTaskId) {
+        let t = state.tasks.find(t => t.id == editTaskId);
+        if (t) showTaskEditForm(t);
     }
 
     let sgId = e.target.dataset.subgoalCheck;
